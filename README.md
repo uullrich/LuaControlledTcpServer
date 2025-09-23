@@ -15,7 +15,7 @@ make
 ### Default Script
 
 ```bash
-./LuaTest
+./LuaControlledTcpServer
 ```
 
 This will run with the default `scripts/server.lua`.
@@ -23,7 +23,7 @@ This will run with the default `scripts/server.lua`.
 ### Custom Script
 
 ```bash
-./LuaTest scripts/simple.lua
+./LuaControlledTcpServer scripts/simple.lua
 ```
 
 ## Available Lua Functions

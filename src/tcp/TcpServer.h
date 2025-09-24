@@ -39,6 +39,7 @@ private:
   private:
     void doRead();
     void processMessage();
+    void handleReadComplete(std::error_code ec, std::size_t bytesRead);
 
     tcp::socket m_socket;
     TcpServer &m_server;
@@ -51,7 +52,6 @@ private:
   void doAccept();
   void removeSession(const SessionId &id);
 
-  asio::io_context &m_ioContext;
   tcp::acceptor m_acceptor;
   std::unordered_map<SessionId, std::shared_ptr<Session>> m_sessions;
   std::atomic<bool> m_running;

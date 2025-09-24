@@ -7,8 +7,7 @@
 #include <iostream>
 
 TcpServer::TcpServer(asio::io_context &ioContext, uint16_t port)
-    : m_ioContext(ioContext),
-      m_acceptor(ioContext, tcp::endpoint(tcp::v4(), port)), m_running(false),
+    : m_acceptor(ioContext, tcp::endpoint(tcp::v4(), port)), m_running(false),
       m_nextId(1) {}
 
 TcpServer::~TcpServer() { TcpServer::stop(); }
@@ -98,12 +97,14 @@ void TcpServer::doAccept() {
 
 void TcpServer::removeSession(const std::string &id) {
   auto it = m_sessions.find(id);
-  if (it != m_sessions.end()) {
-    m_sessions.erase(it);
+  if (it == m_sessions.end()) {
+    return;
+  }
 
-    if (m_disconnectCallback) {
-      m_disconnectCallback(id);
-    }
+  m_sessions.erase(it);
+
+  if (m_disconnectCallback) {
+    m_disconnectCallback(id);
   }
 }
 
@@ -151,48 +152,51 @@ std::string TcpServer::Session::getId() const { return m_id; }
 
 void TcpServer::Session::doRead() {
   auto self = shared_from_this();
-  m_socket.async_read_some(
-      asio::buffer(m_readBuffer),
-      [this, self](std::error_code ec, std::size_t bytesRead) {
-        if (!ec) {
-          // Process read data
-          for (size_t i = 0; i < bytesRead; ++i) {
-            m_messageBuffer.push_back(m_readBuffer[i]);
+  m_socket.async_read_some(asio::buffer(m_readBuffer),
+                           std::bind(&Session::handleReadComplete, self,
+                                     std::placeholders::_1,
+                                     std::placeholders::_2));
+}
 
-            if (m_messageBuffer.size() == m_bytesNeeded) {
-              if (m_bytesNeeded == 4) {
-                // We have the length header, now get the message body
-                uint32_t msgLength =
-                    static_cast<uint32_t>(m_messageBuffer[0]) << 24 |
-                    static_cast<uint32_t>(m_messageBuffer[1]) << 16 |
-                    static_cast<uint32_t>(m_messageBuffer[2]) << 8 |
-                    static_cast<uint32_t>(m_messageBuffer[3]);
+void TcpServer::Session::handleReadComplete(std::error_code ec,
+                                            std::size_t bytesRead) {
+  if (ec) {
+    if (ec != asio::error::eof && ec != asio::error::connection_reset) {
+      std::cerr << "Error reading from client " << m_id << ": " << ec.message()
+                << std::endl;
+    }
+    m_server.removeSession(m_id);
+    return;
+  }
 
-                m_bytesNeeded += msgLength;
-              } else {
-                // We have the full message
-                processMessage();
+  // Append new data to buffer
+  m_messageBuffer.insert(m_messageBuffer.end(), m_readBuffer.begin(),
+                         m_readBuffer.begin() + bytesRead);
 
-                // Reset for next message
-                m_messageBuffer.clear();
-                m_bytesNeeded = 4;
-              }
-            }
-          }
+  while (m_messageBuffer.size() >= m_bytesNeeded) {
+    if (m_bytesNeeded == 4) {
+      // Parse length header
+      uint32_t msgLength = (static_cast<uint32_t>(m_messageBuffer[0]) << 24) |
+                           (static_cast<uint32_t>(m_messageBuffer[1]) << 16) |
+                           (static_cast<uint32_t>(m_messageBuffer[2]) << 8) |
+                           static_cast<uint32_t>(m_messageBuffer[3]);
 
-          // Continue reading
-          doRead();
-        } else {
-          // Handle errors
-          if (ec != asio::error::eof && ec != asio::error::connection_reset) {
-            std::cerr << "Error reading from client " << m_id << ": "
-                      << ec.message() << std::endl;
-          }
+      if (msgLength > 1024 * 1024) { // 1MB limit
+        m_server.removeSession(m_id);
+        return;
+      }
 
-          // Remove this session
-          m_server.removeSession(m_id);
-        }
-      });
+      m_bytesNeeded = 4 + msgLength;
+    } else {
+      processMessage();
+
+      m_messageBuffer.erase(m_messageBuffer.begin(),
+                            m_messageBuffer.begin() + m_bytesNeeded);
+      m_bytesNeeded = 4;
+    }
+  }
+
+  doRead();
 }
 
 void TcpServer::Session::processMessage() {
@@ -200,9 +204,9 @@ void TcpServer::Session::processMessage() {
   std::vector<uint8_t> canData(m_messageBuffer.begin() + 4,
                                m_messageBuffer.end());
 
-  auto CanMessage = CanMessage::deserialize(canData);
+  auto canMessage = CanMessage::deserialize(canData);
 
   if (m_server.m_messageCallback) {
-    m_server.m_messageCallback(m_id, CanMessage);
+    m_server.m_messageCallback(m_id, canMessage);
   }
 }

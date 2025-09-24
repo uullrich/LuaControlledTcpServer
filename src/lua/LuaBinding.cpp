@@ -104,22 +104,19 @@ void LuaBinding::startServer(uint16_t port) {
   try {
     m_server = std::make_unique<TcpServer>(m_ioContext, port);
 
-    // Set callbacks
     m_server->setConnectCallback(
-        [this](const std::string &clientId) { onClientConnected(clientId); });
+        std::bind(&LuaBinding::onClientConnected, this, std::placeholders::_1));
 
-    m_server->setDisconnectCallback([this](const std::string &clientId) {
-      onClientDisconnected(clientId);
-    });
+    m_server->setDisconnectCallback(std::bind(&LuaBinding::onClientDisconnected,
+                                              this, std::placeholders::_1));
 
-    m_server->setMessageCallback(
-        [this](const std::string &clientId, const CanMessage &message) {
-          onMessageReceived(clientId, message);
-        });
+    m_server->setMessageCallback(std::bind(&LuaBinding::onMessageReceived, this,
+                                           std::placeholders::_1,
+                                           std::placeholders::_2));
 
     m_server->start();
     spdlog::info("Server started on port {}", port);
-  } catch (const std::exception &error) {
+  } catch (const asio::system_error &error) {
     spdlog::error("Failed to start server: {}", error.what());
   }
 }
@@ -156,7 +153,7 @@ std::string LuaBinding::createCanMessage(uint32_t id, const sol::table &data,
 
   // Store the message
   {
-    std::lock_guard<std::mutex> lock(m_messagesMutex);
+    std::scoped_lock lock(m_messagesMutex);
     m_canMessages[messageId] = message;
   }
 
@@ -172,7 +169,7 @@ bool LuaBinding::sendCanMessage(const std::string &clientId,
 
   CanMessage message;
   {
-    std::lock_guard<std::mutex> lock(m_messagesMutex);
+    std::scoped_lock lock(m_messagesMutex);
     auto it = m_canMessages.find(messageId);
     if (it == m_canMessages.end()) {
       spdlog::error("Message not found: {}", messageId);
@@ -199,7 +196,7 @@ bool LuaBinding::broadcastCanMessage(const std::string &messageId) {
 
   CanMessage message;
   {
-    std::lock_guard<std::mutex> lock(m_messagesMutex);
+    std::scoped_lock lock(m_messagesMutex);
     auto it = m_canMessages.find(messageId);
     if (it == m_canMessages.end()) {
       spdlog::error("Message not found: {}", messageId);
@@ -227,11 +224,11 @@ sol::table LuaBinding::getConnectedClients() {
   return result;
 }
 
-void LuaBinding::log(const std::string &message) {
+void LuaBinding::log(const std::string &message) const {
   spdlog::info("[LUA] - {}", message);
 }
 
-void LuaBinding::logError(const std::string &message) {
+void LuaBinding::logError(const std::string &message) const {
   spdlog::error("[LUA] - {}", message);
 }
 
@@ -245,7 +242,7 @@ void LuaBinding::wait(int milliseconds) {
 void LuaBinding::onClientConnected(const std::string &clientId) {
   // Add to queue for Lua to process
   {
-    std::lock_guard<std::mutex> lock(m_queueMutex);
+    std::scoped_lock lock(m_queueMutex);
     m_connectedClients.push(clientId);
   }
 
@@ -271,7 +268,7 @@ void LuaBinding::onClientConnected(const std::string &clientId) {
 void LuaBinding::onClientDisconnected(const std::string &clientId) {
   // Add to queue for Lua to process
   {
-    std::lock_guard<std::mutex> lock(m_queueMutex);
+    std::scoped_lock lock(m_queueMutex);
     m_disconnectedClients.push(clientId);
   }
 
@@ -298,7 +295,7 @@ void LuaBinding::onMessageReceived(const std::string &clientId,
                                    const CanMessage &message) {
   // Add to queue for Lua to process
   {
-    std::lock_guard<std::mutex> lock(m_queueMutex);
+    std::scoped_lock lock(m_queueMutex);
     m_receivedMessages.push({clientId, message});
   }
 

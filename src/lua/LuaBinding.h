@@ -39,8 +39,8 @@ private:
   sol::table getConnectedClients();
 
   // Logging
-  void log(const std::string &message);
-  void logError(const std::string &message);
+  void log(const std::string &message) const;
+  void logError(const std::string &message) const;
 
   // Waiting
   void wait(int milliseconds);

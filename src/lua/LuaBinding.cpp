@@ -1,10 +1,8 @@
 #include "LuaBinding.h"
 
+#include <spdlog/spdlog.h>
+
 #include <chrono>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <thread>
 
 LuaBinding::LuaBinding(asio::io_context &ioContext)
     : m_ioContext(ioContext),
@@ -18,7 +16,6 @@ LuaBinding::LuaBinding(asio::io_context &ioContext)
                        sol::lib::string, sol::lib::math, sol::lib::table,
                        sol::lib::io, sol::lib::os);
 
-  // Register functions
   registerFunctions();
 }
 
@@ -36,14 +33,14 @@ bool LuaBinding::loadScript(const std::string &filename) {
 
     if (!result.valid()) {
       sol::error err = result;
-      logError("Error loading script: " + std::string(err.what()));
+      spdlog::error("Error loading script: {}", err.what());
       return false;
     }
 
-    log("Script loaded successfully: " + filename);
+    spdlog::info("Script loaded successfully: {}", filename);
     return true;
-  } catch (const sol::error &e) {
-    logError("Error loading script: " + std::string(e.what()));
+  } catch (const sol::error &error) {
+    spdlog::error("Error loading script: {}", error.what());
     return false;
   }
 }
@@ -53,7 +50,7 @@ bool LuaBinding::executeScript() {
     // Check if main function exists
     sol::optional<sol::function> mainFunc = m_lua["main"];
     if (!mainFunc) {
-      logError("main() function not found in loaded script");
+      spdlog::error("main() function not found in loaded script");
       return false;
     }
 
@@ -61,15 +58,15 @@ bool LuaBinding::executeScript() {
     auto result = mainFunc.value()();
 
     if (!result.valid()) {
-      sol::error err = result;
-      logError("Error executing main(): " + std::string(err.what()));
+      sol::error error = result;
+      spdlog::error("Error executing main(): {}", error.what());
       return false;
     }
 
-    log("Script executed successfully");
+    spdlog::info("Script executed successfully");
     return true;
   } catch (const sol::error &e) {
-    logError("Error executing script: " + std::string(e.what()));
+    spdlog::error("Error executing script: {}", e.what());
     return false;
   }
 }
@@ -100,7 +97,7 @@ void LuaBinding::registerFunctions() {
 
 void LuaBinding::startServer(uint16_t port) {
   if (m_server) {
-    logError("Server already running");
+    spdlog::error("Server already running");
     return;
   }
 
@@ -121,9 +118,9 @@ void LuaBinding::startServer(uint16_t port) {
         });
 
     m_server->start();
-    log("Server started on port " + std::to_string(port));
-  } catch (const std::exception &e) {
-    logError("Failed to start server: " + std::string(e.what()));
+    spdlog::info("Server started on port {}", port);
+  } catch (const std::exception &error) {
+    spdlog::error("Failed to start server: {}", error.what());
   }
 }
 
@@ -133,7 +130,7 @@ void LuaBinding::stopServer() {
 
   m_server->stop();
   m_server.reset();
-  log("Server stopped");
+  spdlog::info("Server stopped");
 }
 
 std::string LuaBinding::createCanMessage(uint32_t id, const sol::table &data,
@@ -145,7 +142,7 @@ std::string LuaBinding::createCanMessage(uint32_t id, const sol::table &data,
   for (int i = 1; i <= data.size(); ++i) {
     sol::object value = data[i];
     if (value.is<int>()) {
-      uint8_t byte = static_cast<uint8_t>(value.as<int>() & 0xFF);
+      auto byte = static_cast<uint8_t>(value.as<int>() & 0xFF);
       bytes.push_back(byte);
     }
   }
@@ -169,7 +166,7 @@ std::string LuaBinding::createCanMessage(uint32_t id, const sol::table &data,
 bool LuaBinding::sendCanMessage(const std::string &clientId,
                                 const std::string &messageId) {
   if (!m_server) {
-    logError("Server not running");
+    spdlog::error("Server not running");
     return false;
   }
 
@@ -178,7 +175,7 @@ bool LuaBinding::sendCanMessage(const std::string &clientId,
     std::lock_guard<std::mutex> lock(m_messagesMutex);
     auto it = m_canMessages.find(messageId);
     if (it == m_canMessages.end()) {
-      logError("Message not found: " + messageId);
+      spdlog::error("Message not found: {}", messageId);
       return false;
     }
     message = it->second;
@@ -186,9 +183,9 @@ bool LuaBinding::sendCanMessage(const std::string &clientId,
 
   bool success = m_server->sendMessage(clientId, message);
   if (success) {
-    log("Sent message to client " + clientId + ": " + message.toString());
+    spdlog::info("Sent message to client {}: {}", clientId, message.toString());
   } else {
-    logError("Failed to send message to client " + clientId);
+    spdlog::error("Failed to send message to client {}", clientId);
   }
 
   return success;
@@ -196,7 +193,7 @@ bool LuaBinding::sendCanMessage(const std::string &clientId,
 
 bool LuaBinding::broadcastCanMessage(const std::string &messageId) {
   if (!m_server) {
-    logError("Server not running");
+    spdlog::error("Server not running");
     return false;
   }
 
@@ -205,14 +202,14 @@ bool LuaBinding::broadcastCanMessage(const std::string &messageId) {
     std::lock_guard<std::mutex> lock(m_messagesMutex);
     auto it = m_canMessages.find(messageId);
     if (it == m_canMessages.end()) {
-      logError("Message not found: " + messageId);
+      spdlog::error("Message not found: {}", messageId);
       return false;
     }
     message = it->second;
   }
 
   m_server->broadcastMessage(message);
-  log("Broadcast message: " + message.toString());
+  spdlog::info("Broadcast message: {}", message.toString());
 
   return true;
 }
@@ -231,11 +228,11 @@ sol::table LuaBinding::getConnectedClients() {
 }
 
 void LuaBinding::log(const std::string &message) {
-  std::cout << "[INFO] " << message << std::endl;
+  spdlog::info("[LUA] - {}", message);
 }
 
 void LuaBinding::logError(const std::string &message) {
-  std::cerr << "[ERROR] " << message << std::endl;
+  spdlog::error("[LUA] - {}", message);
 }
 
 void LuaBinding::wait(int milliseconds) {
@@ -261,13 +258,12 @@ void LuaBinding::onClientConnected(const std::string &clientId) {
     try {
       sol::protected_function_result result = callback(clientId);
       if (!result.valid()) {
-        sol::error err = result;
-        logError("Error in onClientConnected callback: " +
-                 std::string(err.what()));
+        sol::error error = result;
+        spdlog::error("Error in onClientConnected callback: {}", error.what());
       }
-    } catch (const sol::error &e) {
-      logError("Exception in onClientConnected callback: " +
-               std::string(e.what()));
+    } catch (const sol::error &error) {
+      spdlog::error("Exception in onClientConnected callback: {}",
+                    error.what());
     }
   }
 }
@@ -288,13 +284,12 @@ void LuaBinding::onClientDisconnected(const std::string &clientId) {
     try {
       sol::protected_function_result result = callback(clientId);
       if (!result.valid()) {
-        sol::error err = result;
-        logError("Error in onClientDisconnected callback: " +
-                 std::string(err.what()));
+        sol::error error = result;
+        spdlog::error("Error in onClientDisconnected callback: {}",
+                      error.what());
       }
     } catch (const sol::error &e) {
-      logError("Exception in onClientDisconnected callback: " +
-               std::string(e.what()));
+      spdlog::error("Exception in onClientDisconnected callback: {}", e.what());
     }
   }
 }
@@ -326,13 +321,11 @@ void LuaBinding::onMessageReceived(const std::string &clientId,
                    message.isRTR());
 
       if (!result.valid()) {
-        sol::error err = result;
-        logError("Error in onMessageReceived callback: " +
-                 std::string(err.what()));
+        sol::error error = result;
+        spdlog::error("Error in onMessageReceived callback: {}", error.what());
       }
-    } catch (const sol::error &e) {
-      logError("Exception in onMessageReceived callback: " +
-               std::string(e.what()));
+    } catch (const sol::error &error) {
+      spdlog::error("Exception in onMessageReceived callback: ", error.what());
     }
   }
 }

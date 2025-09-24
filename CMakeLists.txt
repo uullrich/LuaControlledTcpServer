@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(deps/asio.cmake)
 include(deps/sol2.cmake)
+include(deps/spdlog.cmake)
 include(cmake/lua_script_operations.cmake)
 
 add_executable(${PROJECT_NAME} 
@@ -19,6 +20,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE sol2_interface asio_interface)
+target_link_libraries(${PROJECT_NAME} PRIVATE sol2_interface asio_interface spdlog::spdlog)
 
 copy_lua_scripts_to_target(${PROJECT_NAME})

@@ -3,6 +3,7 @@
 #include <tcp/TcpServer.h>
 
 #include <asio.hpp>
+#include <spdlog/spdlog.h>
 
 #include <chrono>
 #include <iostream>
@@ -10,7 +11,7 @@
 #include <thread>
 
 int main(int argc, char *argv[]) {
-  std::cout << "Starting Lua-controlled TCP Server..." << std::endl;
+  spdlog::info("Starting Lua-controlled TCP Server...");
 
   try {
     asio::io_context ioContext;
@@ -22,35 +23,35 @@ int main(int argc, char *argv[]) {
     }
 
     if (!luaBinding.loadScript(scriptPath)) {
-      std::cerr << "Failed to load Lua script: " << scriptPath << std::endl;
+      spdlog::error("Failed to load Lua script: {}", scriptPath);
       return 1;
     }
 
     if (!luaBinding.executeScript()) {
-      std::cerr << "Failed to execute Lua script" << std::endl;
+      spdlog::error("Failed to execute Lua script");
       return 1;
     }
 
     std::thread ioThread([&ioContext]() {
-      std::cout << "Starting IO context..." << std::endl;
+      spdlog::info("Starting IO context...");
       ioContext.run();
-      std::cout << "IO context stopped" << std::endl;
+      spdlog::info("IO context stopped");
     });
 
-    std::cout << "Server running. Press Enter to stop..." << std::endl;
+    spdlog::info("Server running. Press Enter to stop...");
     std::cin.get();
 
-    std::cout << "Shutting down..." << std::endl;
+    spdlog::info("Shutting down...");
     ioContext.stop();
 
     if (ioThread.joinable()) {
       ioThread.join();
     }
 
-    std::cout << "Server stopped successfully" << std::endl;
+    spdlog::info("Server stopped successfully");
 
-  } catch (const std::exception &e) {
-    std::cerr << "Error: " << e.what() << std::endl;
+  } catch (const std::exception &exception) {
+    spdlog::error("Error: {}", exception.what());
     return 1;
   }
 

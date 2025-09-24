@@ -3,8 +3,7 @@
 #include <asio/co_spawn.hpp>
 #include <asio/detached.hpp>
 #include <asio/streambuf.hpp>
-
-#include <iostream>
+#include <spdlog/spdlog.h>
 
 TcpServer::TcpServer(asio::io_context &ioContext, uint16_t port)
     : m_acceptor(ioContext, tcp::endpoint(tcp::v4(), port)), m_running(false),
@@ -15,8 +14,8 @@ TcpServer::~TcpServer() { TcpServer::stop(); }
 void TcpServer::start() {
   m_running = true;
   doAccept();
-  std::cout << "TCP Server started on port "
-            << m_acceptor.local_endpoint().port() << std::endl;
+  spdlog::info("TCP Server started on port {}",
+               m_acceptor.local_endpoint().port());
 }
 
 void TcpServer::stop() {
@@ -33,7 +32,7 @@ void TcpServer::stop() {
   }
   m_sessions.clear();
 
-  std::cout << "TCP Server stopped" << std::endl;
+  spdlog::info("TCP Server stopped");
 }
 
 bool TcpServer::sendMessage(const std::string &sessionId,
@@ -142,8 +141,7 @@ bool TcpServer::Session::send(const CanMessage &message) {
     asio::write(m_socket, asio::buffer(buffer));
     return true;
   } catch (const asio::system_error &exception) {
-    std::cerr << "Error sending to client " << m_id << ": " << exception.what()
-              << std::endl;
+    spdlog::error("Error sending to client {}: {}", m_id, exception.what());
     return false;
   }
 }
@@ -162,8 +160,7 @@ void TcpServer::Session::handleReadComplete(std::error_code ec,
                                             std::size_t bytesRead) {
   if (ec) {
     if (ec != asio::error::eof && ec != asio::error::connection_reset) {
-      std::cerr << "Error reading from client " << m_id << ": " << ec.message()
-                << std::endl;
+      spdlog::error("Error reading from client {}: {}", m_id, ec.message());
     }
     m_server.removeSession(m_id);
     return;

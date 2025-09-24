@@ -1,3 +1,5 @@
 {
-  "sonarlint.pathToCompileCommands": "${workspaceFolder}/build/compile_commands.json"
+  "sonarlint.pathToCompileCommands": "${workspaceFolder}/build/compile_commands.json",
+  "sonarlint.analysisExcludesStandalone": "${workspaceFolder}/build/**",
+  "editor.formatOnSave": true
 }

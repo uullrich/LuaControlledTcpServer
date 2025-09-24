@@ -79,7 +79,6 @@ void TcpServer::setDisconnectCallback(DisconnectCallback callback) {
 void TcpServer::doAccept() {
   m_acceptor.async_accept([this](std::error_code ec, tcp::socket socket) {
     if (!ec) {
-      m_nextId++;
       std::string id = std::to_string(m_nextId);
       auto session = std::make_shared<Session>(std::move(socket), *this, id);
       m_sessions[id] = session;
@@ -88,6 +87,7 @@ void TcpServer::doAccept() {
       if (m_connectCallback) {
         m_connectCallback(id);
       }
+      m_nextId++;
     }
 
     if (m_running) {
